@@ -1,0 +1,140 @@
+Retrieval-Augmented Generation (RAG) System Architecture
+
+This document describes the architecture and implementation of a local RAG system.
+
+SYSTEM OVERVIEW
+
+A RAG system combines the power of large language models (LLMs) with external knowledge retrieval to generate more accurate and contextually relevant responses. Unlike pure LLMs that rely solely on their training data, RAG systems can access up-to-date information from document collections.
+
+COMPONENTS
+
+1. Vector Database (Qdrant)
+   - Stores document embeddings as high-dimensional vectors
+   - Enables fast semantic similarity search
+   - Uses cosine distance for normalized embeddings
+   - Supports metadata filtering and hybrid search
+
+2. Embedding Model (BAAI/bge-m3)
+   - Converts text into 1024-dimensional dense vectors
+   - Pre-trained on multilingual data
+   - Produces normalized embeddings optimized for cosine similarity
+   - Runs locally without external API calls
+
+3. Language Model (Ollama)
+   - Local LLM runtime supporting multiple models
+   - Provides both native and OpenAI-compatible APIs
+   - Supports streaming responses for real-time interaction
+   - Configurable temperature and token limits
+
+4. API Service (FastAPI)
+   - Orchestrates ingestion, retrieval, and generation
+   - Provides RESTful endpoints for all operations
+   - Implements authentication via Bearer tokens
+   - Supports both streaming and non-streaming responses
+
+DATA FLOW
+
+Ingestion Pipeline:
+1. Documents are loaded from files or folders
+2. Text is extracted based on file type (PDF, Markdown, TXT)
+3. Content is split into overlapping chunks
+4. Each chunk is embedded using the embedding model
+5. Embeddings and metadata are stored in Qdrant
+
+Query Pipeline:
+1. User submits a natural language question
+2. Question is embedded using the same model
+3. Qdrant retrieves top-k similar chunks via vector search
+4. Retrieved chunks are formatted as context
+5. Context and question form a prompt for the LLM
+6. LLM generates an answer with source citations
+7. Response is streamed back to the user
+
+DESIGN DECISIONS
+
+Chunking Strategy:
+- Default chunk size: 800 characters
+- Overlap: 100 characters to preserve context
+- Sentence-aware splitting to avoid mid-sentence breaks
+
+Embedding Normalization:
+- All vectors are L2-normalized before storage
+- Enables efficient cosine similarity via dot product
+- Consistent scoring across different query lengths
+
+Idempotent Ingestion:
+- Each chunk has a content-based hash
+- Duplicate chunks are skipped during upsert
+- Enables re-running ingestion without duplicates
+
+Citation Strategy:
+- Each chunk includes doc_id and chunk_id
+- Sources are referenced in format: doc_id#chunk_id
+- Page numbers included when available (PDF documents)
+
+SECURITY CONSIDERATIONS
+
+- API key required for all operations except health checks
+- Keys passed via Authorization: Bearer <token> header
+- No public port exposure in default Docker configuration
+- Recommend changing default API key in production
+
+PERFORMANCE CHARACTERISTICS
+
+Ingestion:
+- ~100-200 chunks per minute (depends on hardware)
+- Embedding generation is the bottleneck
+- Batch processing improves throughput
+
+Query:
+- Retrieval: typically 50-200ms for top-5 search
+- LLM generation: 10-30 tokens/second (8B model)
+- Time to first token: 200-500ms
+- Total latency: 2-10 seconds for typical queries
+
+OFFLINE DEPLOYMENT
+
+The system supports fully offline operation:
+1. Pre-download embedding model to local cache
+2. Pull LLM model into Ollama volume
+3. Set environment variables: TRANSFORMERS_OFFLINE=1
+4. Mount models directory into containers
+5. Verify no network calls during runtime
+
+MONITORING AND OBSERVABILITY
+
+Key metrics tracked:
+- trace_id: unique identifier per request
+- retrieval_time_ms: time spent in vector search
+- tokens_generated: number of LLM output tokens
+- latency_ms: total request duration
+- time_to_first_token_ms: responsiveness indicator
+
+All metrics are logged and can be exported to monitoring systems.
+
+SCALABILITY
+
+Current limitations:
+- Single-node deployment
+- Qdrant in-memory index (limited by RAM)
+- Ollama handles one request at a time
+
+Scaling options:
+- Add multiple RAG-API replicas behind load balancer
+- Use Qdrant cluster mode for distributed storage
+- Deploy multiple Ollama instances for parallel LLM inference
+- Add Redis for caching frequent queries
+
+FUTURE ENHANCEMENTS
+
+Potential improvements:
+- Hybrid search combining dense and sparse retrieval
+- Reranking retrieved chunks for better relevance
+- Query expansion for improved recall
+- Conversation memory for multi-turn chat
+- Document update/delete operations
+- Fine-tuned embedding models for domain-specific data
+
+CONCLUSION
+
+This RAG architecture provides a solid foundation for local, private question-answering systems. All components run without cloud dependencies, ensuring data privacy and operational independence.
