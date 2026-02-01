@@ -24,6 +24,8 @@ wheels/
 venv/
 env/
 ENV/
+!.env.example
+.env.*
 .venv
 
 # IDEs
